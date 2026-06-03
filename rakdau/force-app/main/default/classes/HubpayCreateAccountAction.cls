@@ -5,6 +5,7 @@ public with sharing class HubpayCreateAccountAction {
     }
 
     public class Result {
+        
         @InvocableVariable
         public Id accountId;
         @InvocableVariable
