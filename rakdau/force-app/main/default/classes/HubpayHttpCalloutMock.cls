@@ -1,17 +1,24 @@
 @isTest
 global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
-    private Boolean successTest;
-
-    global HubpayHttpCalloutMock (){
-        successTest = true;
+    public enum MockMode {
+        SUCCESS,
+        VALIDATION_FAIL,
+        EXCEPTION_TEST,
+        AUTH_FAIL,
+        SERVER_ERROR
     }
 
-    global HubpayHttpCalloutMock (Boolean val){
-        successTest = val;
+    private MockMode mode;
+
+    global HubpayHttpCalloutMock (){
+        mode = MockMode.SUCCESS;
+    }
+
+    global HubpayHttpCalloutMock (String modeName){
+        this.mode = MockMode.valueOf(modeName);
     }
 
     global HTTPResponse respond(HTTPRequest req) {
-
         if(req.getEndpoint().containsIgnoreCase('token') || req.getEndpoint().containsIgnoreCase('auth')) {
             // Give it a fake access token
             String tokenResponse = '{' +
@@ -19,14 +26,15 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
                 '"token_type": "Bearer",' +
                 '"expires_in": 3600' +
             '}';
-            HttpResponse response = new HttpResponse();
-            response.setHeader('Content-Type', 'application/json');
-            response.setBody(tokenResponse);
-            response.setStatusCode(200);
-            return response;
-        }else if(req.getEndpoint().containsIgnoreCase('/v1/account') && successTest == true){
-            // Create a fake response
-            Map<String, Object> payload = new Map<String, Object>{
+            HttpResponse res = new HttpResponse();
+            res.setHeader('Content-Type', 'application/json');
+            res.setBody(tokenResponse);
+            res.setStatusCode(200);
+            return res;
+
+        }else{
+            if(mode == MockMode.SUCCESS){
+                Map<String, Object> payload = new Map<String, Object>{
                         'id' => 'f8d7f528-87b9-426a-918d-e3f0552e88e4' ,
                         'accountType' => 'BUSINESS',
                         'accountName' => 'ACME Co',
@@ -36,14 +44,13 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
                         'externalId' => 'AE00000001',
                         'accountStatus' => 'CREATED'
                     };
-            HttpResponse res = new HttpResponse();
-            res.setHeader('Content-Type', 'application/json');
-            res.setBody(JSON.serialize(payload));
-            res.setStatusCode(200);
-            return res;
-        }else if(req.getEndpoint().containsIgnoreCase('/v1/account') && successTest == false){
-            // Create a fake response
-            Map<String, Object> payload = new Map<String, Object>{
+                HttpResponse res = new HttpResponse();
+                res.setHeader('Content-Type', 'application/json');
+                res.setBody(JSON.serialize(payload));
+                res.setStatusCode(200);
+                return res;
+            }else if(mode == MockMode.VALIDATION_FAIL){
+                Map<String, Object> payload = new Map<String, Object>{
                         'code' => 'validation_failed' ,
                         'message' => 'One or more fields are missing or invalid',
                         'status' => 400,
@@ -54,17 +61,22 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
                                 'field' => 'sourceCurrency',
                                 'message' => 'Source currency is required'
                             }
-                        },
-                        'externalId' => 'AE00000001',
-                        'accountStatus' => 'CREATED'
+                        }
                     };
-            HttpResponse res = new HttpResponse();
-            res.setHeader('Content-Type', 'application/json');
-            res.setBody(JSON.serialize(payload));
-            res.setStatusCode(400);
-            return res;
+                HttpResponse res = new HttpResponse();
+                res.setHeader('Content-Type', 'application/json');
+                res.setBody(JSON.serialize(payload));
+                res.setStatusCode(400);
+                return res;
+            }else if(mode == MockMode.EXCEPTION_TEST){
+                throw new CalloutException('Simulated callout failure');
+            }else if(mode == MockMode.SERVER_ERROR){
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(500);
+                res.setBody('{"message":"Internal server error"}');
+                return res;
+            }
         }
-
     HttpResponse fallback = new HttpResponse();
     fallback.setStatusCode(404);
     fallback.setHeader('Content-Type', 'application/json');

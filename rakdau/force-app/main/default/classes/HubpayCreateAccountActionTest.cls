@@ -197,7 +197,7 @@ public with sharing class HubpayCreateAccountActionTest {
 
         HubpayCreateAccountAction.Request req = new HubpayCreateAccountAction.Request();
         req.accountId = testAccRecord.Id;
-        Test.setMock(HttpCalloutMock.class, new HubpayHttpCalloutMock(false));
+        Test.setMock(HttpCalloutMock.class, new HubpayHttpCalloutMock('VALIDATION_FAIL'));
 
         Test.startTest();
         List<HubpayCreateAccountAction.Result> results = HubpayCreateAccountAction.execute(
@@ -209,6 +209,44 @@ public with sharing class HubpayCreateAccountActionTest {
         System.assert(
             results[0].message.containsIgnoreCase('Create account failed'),
             'Expected HTTP error message, got: ' + results[0].message
+        );
+        Id idVar = testAccRecord.Id;
+        Account updated = Database.query(
+            'SELECT ' + HubpayIntegrationHelper.FIELD_STATUS
+            + ' FROM Account WHERE Id = :idVar'
+        );
+        System.assertEquals(
+            HubpayIntegrationHelper.STATUS_INTEGRATION_ERROR,
+            updated.get(HubpayIntegrationHelper.FIELD_STATUS)
+        );
+    }
+
+    @isTest
+    static void testCalloutException_SetsIntegrationError() {
+       String businessAccRecordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName().get('Business').getRecordTypeId();
+        Account testAccRecord = DAO_TestDataFactory.getTestAccount('Test Account',businessAccRecordTypeId, true);    
+        Contact testConRecord = DAO_TestDataFactory.getTestContact('sfdctest', 'velo', testAccRecord.Id, true);
+        AccountContactRelation rel = [
+            SELECT AccountId, Contact.Email, Contact.MobilePhone, Roles 
+            FROM AccountContactRelation 
+            WHERE AccountId =:testAccRecord.Id AND ContactId =:testConRecord.Id ];
+        rel.Roles = 'Primary Contact';
+        update rel;
+
+        HubpayCreateAccountAction.Request req = new HubpayCreateAccountAction.Request();
+        req.accountId = testAccRecord.Id;
+        Test.setMock(HttpCalloutMock.class, new HubpayHttpCalloutMock('EXCEPTION_TEST'));
+
+        Test.startTest();
+        List<HubpayCreateAccountAction.Result> results = HubpayCreateAccountAction.execute(
+            new List<HubpayCreateAccountAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, results[0].success);
+        System.assert(
+            results[0].message.containsIgnoreCase('Create account exception'),
+            results[0].message
         );
         Id idVar = testAccRecord.Id;
         Account updated = Database.query(
