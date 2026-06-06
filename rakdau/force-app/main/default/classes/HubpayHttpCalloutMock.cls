@@ -8,7 +8,9 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
         SERVER_ERROR,
         EMPTY_BODY,
         INVITE_fAILED,
-        NOIBAN
+        NOIBAN,
+        INVITE_EXISTS,
+        NESTED_SUCCESS
     }
 
     private MockMode mode;
@@ -35,18 +37,75 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
             res.setStatusCode(200);
             return res;
         }else if(req.getEndpoint().containsIgnoreCase('invite')){
-            HttpResponse res = new HttpResponse();
+            if(mode == MockMode.SUCCESS){
+                HttpResponse res = new HttpResponse();
 
-            Map<String,Object> payload =
-                new Map<String,Object>{
-                    'inviteUrl' => 'https://hubpay.test/invite'
+                Map<String,Object> payload =
+                    new Map<String,Object>{
+                        'inviteUrl' => 'https://hubpay.test/invite'
+                    };
+
+                res.setStatusCode(200);
+                res.setHeader('Content-Type','application/json');
+                res.setBody(JSON.serialize(payload));
+
+                return res;
+            }else if(mode == MockMode.VALIDATION_FAIL){
+                Map<String, Object> payload = new Map<String, Object>{
+                        'code' => 'validation_failed' ,
+                        'message' => 'One or more fields are missing or invalid',
+                        'status' => 400,
+                        'timestamp' => '2025-06-10T10:15:31Z',
+                        'path' => '/v1/collections/rates',
+                        'errors' => new List<Object>{
+                            new Map<String, Object>{
+                                'field' => 'sourceCurrency',
+                                'message' => 'Source currency is required'
+                            }
+                        }
+                    };
+                HttpResponse res = new HttpResponse();
+                res.setHeader('Content-Type', 'application/json');
+                res.setBody(JSON.serialize(payload));
+                res.setStatusCode(400);
+                return res;
+            }else if(mode == MockMode.EXCEPTION_TEST){
+                throw new CalloutException('Simulated callout failure');
+            }else if(mode == MockMode.INVITE_EXISTS){
+                
+                HttpResponse res = new HttpResponse();
+                res.setHeader('Content-Type', 'application/json');
+                res.setBody('pending invite already exists');
+                res.setStatusCode(409);
+                return res;
+            }else if(mode == MockMode.INVITE_fAILED){
+                Map<String, Object> payload = new Map<String, Object>{
+                        'id' => 'f8d7f528-87b9-426a-918d-e3f0552e88e4' ,
+                        'accountType' => 'BUSINESS',
+                        'accountName' => 'ACME Co',
+                        'accountNumber'=>'AE123456789',
+                        'currency'=>'AED'
+                    };
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(200);
+                res.setBody(JSON.serialize(payload));
+                return res;
+            }else if(mode == MockMode.NESTED_SUCCESS){
+                Map<String,Object> data = new Map<String,Object>{
+                    'inviteUrl' => 'https://app.hubpay.com/invite/nested'
                 };
 
-            res.setStatusCode(200);
-            res.setHeader('Content-Type','application/json');
-            res.setBody(JSON.serialize(payload));
+                Map<String,Object> payload = new Map<String,Object>{
+                    'data' => data
+                };
 
-            return res;
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(200);
+                res.setHeader('Content-Type','application/json');
+                res.setBody(JSON.serialize(payload));
+                return res;
+            }
+            return null;
         }
         else{
             if(mode == MockMode.SUCCESS){
