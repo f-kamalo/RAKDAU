@@ -5,7 +5,10 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
         VALIDATION_FAIL,
         EXCEPTION_TEST,
         AUTH_FAIL,
-        SERVER_ERROR
+        SERVER_ERROR,
+        EMPTY_BODY,
+        INVITE_fAILED,
+        NOIBAN
     }
 
     private MockMode mode;
@@ -31,13 +34,29 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
             res.setBody(tokenResponse);
             res.setStatusCode(200);
             return res;
+        }else if(req.getEndpoint().containsIgnoreCase('invite')){
+            HttpResponse res = new HttpResponse();
 
-        }else{
+            Map<String,Object> payload =
+                new Map<String,Object>{
+                    'inviteUrl' => 'https://hubpay.test/invite'
+                };
+
+            res.setStatusCode(200);
+            res.setHeader('Content-Type','application/json');
+            res.setBody(JSON.serialize(payload));
+
+            return res;
+        }
+        else{
             if(mode == MockMode.SUCCESS){
                 Map<String, Object> payload = new Map<String, Object>{
                         'id' => 'f8d7f528-87b9-426a-918d-e3f0552e88e4' ,
                         'accountType' => 'BUSINESS',
                         'accountName' => 'ACME Co',
+                        'accountNumber'=>'AE123456789',
+                        'currency'=>'AED',
+                        'inviteUrl' => 'https://hubpay.test/invite',
                         'email' => 'enquiries@acme.co',
                         'phoneNumber' => '+9771234567890',
                         'countryCode' => 'AE',
@@ -75,12 +94,42 @@ global with sharing class HubpayHttpCalloutMock implements HttpCalloutMock {
                 res.setStatusCode(500);
                 res.setBody('{"message":"Internal server error"}');
                 return res;
+            }else if(mode == MockMode.EMPTY_BODY){
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(500);
+                res.setBody('');
+                return res;
+            }else if(mode == MockMode.INVITE_fAILED){
+                Map<String, Object> payload = new Map<String, Object>{
+                        'id' => 'f8d7f528-87b9-426a-918d-e3f0552e88e4' ,
+                        'accountType' => 'BUSINESS',
+                        'accountName' => 'ACME Co',
+                        'accountNumber'=>'AE123456789',
+                        'currency'=>'AED'
+                    };
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(200);
+                res.setBody(JSON.serialize(payload));
+                return res;
+            }else if(mode == MockMode.NOIBAN){
+                Map<String, Object> payload = new Map<String, Object>{
+                        'id' => 'f8d7f528-87b9-426a-918d-e3f0552e88e4' ,
+                        'accountType' => 'BUSINESS',
+                        'accountName' => 'ACME Co',
+                        'currency'=>'AED',
+                        'inviteUrl' => 'https://hubpay.test/invite'
+                    };
+                HttpResponse res = new HttpResponse();
+                res.setStatusCode(200);
+                res.setBody(JSON.serialize(payload));
+                return res;
             }
+        HttpResponse fallback = new HttpResponse();
+        fallback.setStatusCode(404);
+        fallback.setHeader('Content-Type', 'application/json');
+        fallback.setBody('{"error":"Unhandled endpoint: ' + req.getEndpoint() + '"}');
+        return fallback;
         }
-    HttpResponse fallback = new HttpResponse();
-    fallback.setStatusCode(404);
-    fallback.setHeader('Content-Type', 'application/json');
-    fallback.setBody('{"error":"Unhandled endpoint: ' + req.getEndpoint() + '"}');
-    return fallback;
+    
     }
 }
